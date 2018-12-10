@@ -55,6 +55,9 @@ while(1)
 	read(sockfd,buffer,255);
 	if (strlen(buffer) != 0) {
 		printf("Message from server: %s\n",buffer);
+		if (strcmp(buffer, "Disconnecting") == 0) {
+			break;
+		}
 		buffer[0] = '\0';
 	}
 	fgets(sendBuff, 1024, stdin);

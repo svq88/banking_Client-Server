@@ -10,7 +10,7 @@
 #include<pthread.h> 
 //S#include "bankingServer.h"
 
-//pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 typedef struct account {
 	int inUse;
@@ -37,25 +37,67 @@ int serve(char * accountName)
 
 double deposit(double amount, int accountNum)
 {
+	pthread_mutex_lock(&mutex);
 	accounts[accountNum].balance += amount;
-	return accounts[accountNum].balance;
+	double balance = accounts[accountNum].balance;
+	pthread_mutex_unlock(&mutex);
+	return balance;
 }
 
 double withdraw(double amount, int accountNum)
 {
+	pthread_mutex_lock(&mutex);
 	if(accounts[accountNum].balance < amount){
+		pthread_mutex_unlock(&mutex);
 		return -1;
 	}
 	else	{
 		accounts[accountNum].balance -= amount;
-		return accounts[accountNum].balance;
+		double balance = accounts[accountNum].balance;
+		pthread_mutex_unlock(&mutex);
+		return balance;
 	}
 }
 
 double query(int accountNum)
 {
-	return accounts[accountNum].balance;	 
+	pthread_mutex_lock(&mutex);
+	double amt  = accounts[accountNum].balance;
+	pthread_mutex_unlock(&mutex);
+	return amt;	 
 }
+
+int createAccount(char * accountName) {
+	if (numberOfElements == 10000) {
+		return -2;//max amt of accounts
+	}
+
+	pthread_mutex_lock(&mutex);
+	int i;
+	for (i = 0; i < numberOfElements; i++) {
+		if (strcmp(accountName, accounts[i].accountName) == 0) {
+			return -1; //acc exists.
+		}
+	}
+	account account;
+	strcpy(account.accountName, accountName);
+	accounts[numberOfElements] = account;
+	pthread_mutex_unlock(&mutex);
+	return numberOfElements++;
+}
+
+
+int end(int accountNum)
+{
+	if (accountNum == -1) {
+		return -1;
+	}
+	pthread_mutex_lock(&mutex);
+	accounts[accountNum].inUse = 0;
+	pthread_mutex_unlock(&mutex);
+	return -1;
+}
+
 
 void* handle_connection(void *arg)
 {
@@ -77,16 +119,20 @@ void* handle_connection(void *arg)
 				}
 				double amt = query(servedAccount);
 				char buff[255];
-				double total = withdraw(amt, servedAccount);
-				sprintf(buff, "Current Balance: %f\n", total);
+				sprintf(buff, "Current Balance: %f\n", amt);
 				send(sock, buff, 255, 0);
 				continue;
 			} else if (strcmp("end\n", client_message) == 0) {
-				send(sock, "Ending", 255, 0);
+				servedAccount = end(servedAccount);
+				send(sock, "Ending service with current account", 255, 0);
 				continue;
 			} else if (strcmp("quit\n", client_message) == 0) {
-				send(sock, "quitting", 255, 0);
-				continue;
+				end(servedAccount);
+				send(sock, "Disconnecting", 255, 0);
+				shutdown(sock, SHUT_RDWR);
+				close(sock);
+				printf("Disconnected from a client.\n");
+				return;
 			}
 			int length = strlen(client_message);
 			client_message[length - 1] = '\0';
@@ -191,33 +237,7 @@ void* handle_connection(void *arg)
     
 }
 
-int createAccount(char * accountName) {
-	if (numberOfElements == 10000) {
-		return -2;//max amt of accounts
-	}
-	int i;
-	for (i = 0; i < numberOfElements; i++) {
-		if (strcmp(accountName, accounts[i].accountName) == 0) {
-			return -1; //acc exists.
-		}
-	}
-	account account;
-	strcpy(account.accountName, accountName);
-	accounts[numberOfElements] = account;
-	return numberOfElements++;
-}
 
-
-void* end(int accountNum)
-{
-	accounts[accountNum].inUse = 0;
-	return 0;
-}
-
-void* quit()
-{
-
-}
 
 int main(void)
 {
@@ -266,8 +286,8 @@ int socket_desc , client_sock , c;
     while( 1 )
     {
     	int * socketPtr = malloc(sizeof(int));
-        //puts("Connection accepted");
         newsocket = accept(socket_desc, (struct sockaddr *) &client, (socklen_t *) &c);
+		printf("Accepted new client connection!\n");
         if( pthread_create( &thread_id , NULL ,  handle_connection , &newsocket) < 0)
         {
             perror("could not create thread");
