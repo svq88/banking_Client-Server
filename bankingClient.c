@@ -6,10 +6,21 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netdb.h>
+#include<pthread.h> 
 
 struct sockaddr_in serv_addr;
 int sockfd;
 
+void * handleInput (void * arg) {
+	while (1) {
+	int sockfd = *(int*)arg;
+ 	char sendBuff[1024];
+	fgets(sendBuff, 1024, stdin);
+	send(sockfd, sendBuff, 1024, 0);
+	sendBuff[0] = '\0';
+	sleep(2);
+	}	
+}
 
 int main(int varc, char* argv[])
 {
@@ -43,12 +54,13 @@ while(1) {
 	if (connect(sockfd, (struct sockaddr*) &serv_addr, sizeof(serv_addr)) >= 0)
    	{
 		printf("Succesfully connected to the server!\n");
+		printf("Commands will only be executed every two seconds. If you enter multiple commands in a short time span, they will be executed one at a time every two seconds.\n");
       	break;
    	}
 	sleep(3);
 }
- char sendBuff[1024];
-
+pthread_t thread_id;
+pthread_create( &thread_id , NULL ,  handleInput , &sockfd);
 while(1) 
 {
 	read(sockfd,buffer,255);
@@ -59,10 +71,6 @@ while(1)
 		}
 		buffer[0] = '\0';
 	}
-	fgets(sendBuff, 1024, stdin);
-	send(sockfd, sendBuff, 1024, 0);
-	sendBuff[0] = '\0';
-	
 }
 	close(socket_desc);
 	return 0;	

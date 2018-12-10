@@ -18,6 +18,9 @@ typedef struct account {
 	char accountName[255];
 } account;
 
+int socketIds[10000];
+int clientCount = 0;
+
 account accounts[10000];
 
 int numberOfElements = 0;
@@ -295,6 +298,7 @@ int socket_desc , client_sock , c;
     	int * socketPtr = malloc(sizeof(int));
         newsocket = accept(socket_desc, (struct sockaddr *) &client, (socklen_t *) &c);
 		printf("Accepted new client connection!\n");
+		socketIds[clientCount++] = newsocket;
         if( pthread_create( &thread_id , NULL ,  handle_connection , &newsocket) < 0)
         {
             perror("could not create thread");
