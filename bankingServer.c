@@ -106,34 +106,44 @@ void* handle_connection(void *arg)
     
 }
 
-void* create(char * accountName)
-{
-
-}
-
 void* serve(char accountName)
 {
-
+	int i = 0;
+	while(strcmp(accounts[i].accountName) != 0){
+		if(numberOfElements == i && (strcmp(accounts[i].accountName) != 0)){
+			return 1; // write that account does not exist
+		}
+		i++;
+	}
+	accounts[i].inUse = 1;
 }
 
-void* deposit(double amount)
+void* deposit(double amount, int accountNum)
 {
-
+account[accountNum].balance += amount;
+return 0;
 }
 
-void* widthdrawl(double amount)
+void* widthdrawl(double amount, int accountNum)
 {
-
+if(accounts[accountNum].balance < amount){
+	return 1;
+}
+else{
+	account[accountNum].balance -= amount;
+	return 0;
+}
 }
 
-void* query()
+void* query(int accountNum)
 {
-
+	 send(fd, accountNum, sizeof(double));
 }
 
-void* end()
+void* end(int accountNum)
 {
-
+	accounts[accountNum].inUse = 0;
+	return 0;
 }
 
 void* quit()
