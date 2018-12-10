@@ -27,7 +27,7 @@ int serve(char * accountName)
 	int i = 0;
 	while(i < numberOfElements){
 		if(strcmp(accounts[i].accountName, accountName) == 0){
-			if (accounts[i].inUse = 1) {
+			if (accounts[i].inUse == 1) {
 				return -2;
 			}
 			accounts[i].inUse = 1;
