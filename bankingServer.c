@@ -79,6 +79,7 @@ int createAccount(char * accountName) {
 	int i;
 	for (i = 0; i < numberOfElements; i++) {
 		if (strcmp(accountName, accounts[i].accountName) == 0) {
+			pthread_mutex_unlock(&mutex);
 			return -1; //acc exists.
 		}
 	}
