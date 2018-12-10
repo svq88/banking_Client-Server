@@ -12,7 +12,50 @@
 
 //pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
+typedef struct account {
+	int inUse;
+	double balance;
+	char accountName[255];
+} account;
 
+account accounts[10000];
+
+int numberOfElements = 0;
+
+int serve(char * accountName)
+{
+	int i = 0;
+	while(i < numberOfElements){
+		if(strcmp(accounts[i].accountName, accountName) == 0){
+			accounts[i].inUse = 1;
+			return i;
+		}
+		i++;
+	}
+	return -1;//account does not exist
+}
+
+double deposit(double amount, int accountNum)
+{
+	accounts[accountNum].balance += amount;
+	return accounts[accountNum].balance;
+}
+
+double withdraw(double amount, int accountNum)
+{
+	if(accounts[accountNum].balance < amount){
+		return -1;
+	}
+	else	{
+		accounts[accountNum].balance -= amount;
+		return accounts[accountNum].balance;
+	}
+}
+
+double query(int accountNum)
+{
+	return accounts[accountNum].balance;	 
+}
 
 void* handle_connection(void *arg)
 {
@@ -22,13 +65,21 @@ void* handle_connection(void *arg)
     char *message , client_message[1024];
     char buffer[] = "Please enter what you wish to do(create <accountName>, serve <accontName> )\0";
 	send(sock , buffer , 255, 0);
-
+	int servedAccount = -1;
     while(1) {
 		read(sock,client_message,1024);
 		if (strlen(client_message) != 0) {
 			printf("Message from client: %s\n",client_message);
 			if (strcmp("query\n", client_message) == 0) {
-				send(sock, "Querying", 255, 0);
+				if (servedAccount == -1) {
+					send(sock, "You need to access an account using the serve command first.\n", 255, 0);
+					continue;
+				}
+				double amt = query(servedAccount);
+				char buff[255];
+				double total = withdraw(amt, servedAccount);
+				sprintf(buff, "Current Balance: %f\n", total);
+				send(sock, buff, 255, 0);
 				continue;
 			} else if (strcmp("end\n", client_message) == 0) {
 				send(sock, "Ending", 255, 0);
@@ -37,60 +88,94 @@ void* handle_connection(void *arg)
 				send(sock, "quitting", 255, 0);
 				continue;
 			}
+			int length = strlen(client_message);
+			client_message[length - 1] = '\0';
+			char * user = strdup(client_message);
 			char * command = strtok(client_message, " ");
 			if (strcmp("create", command) == 0) {
+				if (servedAccount != -1) {
+					send(sock, "You cannot create an account while accessing one.\n", 255, 0);
+					continue;
+				}
 				command = strtok(NULL, " ");
 				if (strcmp("create", command) == 0 || strcmp("", command) == 0) {
 					char error[] = "Please enter a username - create <username>.";
 					send(sock, error, 255, 0);
 					continue;
 				}
-				int length = strlen(command);
-				command[length - 1] = '\0';
+				user += 7;
+				int check = createAccount(user);
 				char results[255];
-				sprintf(results, "Succesfully created \"%s\"!", command);
+				if (check == -1) {
+					sprintf(results, "Failed to create \"%s\", it already exists!", user);
+				} else if (check == -2) {
+					sprintf(results, "You've reached the max amount of accounts: 10,000");
+				} else {
+					sprintf(results, "Succesfully created \"%s\"!", user);
+				}
 				send(sock, results, 255, 0);
 			} else if (strcmp("serve", command) == 0) {
+				if (servedAccount != -1) {
+					send(sock, "You are already accessing an account.\n", 255, 0);
+					continue;
+				}
 				command = strtok(NULL, " ");
 				if (strcmp("create", command) == 0 || strcmp("", command) == 0) {
 					char error[] = "Please enter a username - create <username>.";
 					send(sock, error, 255, 0);
 					continue;
 				}
-				int length = strlen(command);
-				command[length - 1] = '\0';
+				user += 6;
 				char results[255];
-				sprintf(results, "Succesfully accessed \"%s\"!", command);
+				servedAccount = serve(user);
+				if (servedAccount == -1) {
+					sprintf(results, "Failed to access \"%s\", account does not exist!", user);
+				} else {
+					sprintf(results, "Succesfully accessed \"%s\"!", user);
+				}
 				send(sock, results, 255, 0);
 
 			} else if (strcmp("deposit", command) == 0) {
+				if (servedAccount == -1) {
+					send(sock, "You need to access an account using the serve command first.\n", 255, 0);
+					continue;
+				}
 				command = strtok(NULL, " ");
 				char * endptr;
 				errno = 0;
 				double amt = strtod(command, &endptr);
-				printf("errno %d\n", errno);
-				if (amt == 0 && (errno != 0 || command == endptr)) {
+				if ((amt == 0 && (errno != 0 || command == endptr)) || amt < 0) {
 					char doubleError[] = "Please input a valid double -- deposit <double Amount>. E.g. withdraw 100.05\n";
 					send(sock , doubleError , 255, 0);
 					continue;
 				}
 				char buff[255];
-				sprintf(buff, "Succesfully deposited %f!\n", amt);
+				double total = deposit(amt, servedAccount);
+				sprintf(buff, "Succesfully deposited %f, Current Total: %f!\n", amt, total);
 				send(sock , buff , 255, 0);
 				
 			} else if (strcmp("withdraw", command) == 0) {
+				if (servedAccount == -1) {
+					send(sock, "You need to access an account using the serve command first.\n", 255, 0);
+					continue;
+				}
 				command = strtok(NULL, " ");
 				char * endptr;
 				errno = 0;
 				double amt = strtod(command, &endptr);
 				printf("errno %d\n", errno);
-				if (amt == 0 && (errno != 0 || command == endptr)) {
+				if ((amt == 0 || amt < 0 && (errno != 0 || command == endptr)) || amt < 0) {
 					char doubleError[] = "Please input a valid double -- withdraw <double Amount>. E.g. withdraw 100.05\n";
 					send(sock , doubleError , 255, 0);
 					continue;
 				}
 				char buff[255];
-				sprintf(buff, "Succesfully withdrew %f!\n", amt);
+				double total = withdraw(amt, servedAccount);
+				if (total == -1) {
+					sprintf(buff, "Failed to withdraw %f, balance too low.\n", amt);
+				} else {
+					sprintf(buff, "Succesfully withdrew %f!, Current Total: %f\n", amt, total);
+				}
 				send(sock , buff , 255, 0);
 			
 			} else {
@@ -106,39 +191,22 @@ void* handle_connection(void *arg)
     
 }
 
-void* serve(char accountName)
-{
-	int i = 0;
-	while(strcmp(accounts[i].accountName) != 0){
-		if(numberOfElements == i && (strcmp(accounts[i].accountName) != 0)){
-			return 1; // write that account does not exist
-		}
-		i++;
+int createAccount(char * accountName) {
+	if (numberOfElements == 10000) {
+		return -2;//max amt of accounts
 	}
-	accounts[i].inUse = 1;
+	int i;
+	for (i = 0; i < numberOfElements; i++) {
+		if (strcmp(accountName, accounts[i].accountName) == 0) {
+			return -1; //acc exists.
+		}
+	}
+	account account;
+	strcpy(account.accountName, accountName);
+	accounts[numberOfElements] = account;
+	return numberOfElements++;
 }
 
-void* deposit(double amount, int accountNum)
-{
-account[accountNum].balance += amount;
-return 0;
-}
-
-void* widthdrawl(double amount, int accountNum)
-{
-if(accounts[accountNum].balance < amount){
-	return 1;
-}
-else{
-	account[accountNum].balance -= amount;
-	return 0;
-}
-}
-
-void* query(int accountNum)
-{
-	 send(fd, accountNum, sizeof(double));
-}
 
 void* end(int accountNum)
 {
