@@ -27,6 +27,9 @@ int serve(char * accountName)
 	int i = 0;
 	while(i < numberOfElements){
 		if(strcmp(accounts[i].accountName, accountName) == 0){
+			if (accounts[i].inUse = 1) {
+				return -2;
+			}
 			accounts[i].inUse = 1;
 			return i;
 		}
@@ -175,9 +178,12 @@ void* handle_connection(void *arg)
 				char results[255];
 				servedAccount = serve(user);
 				if (servedAccount == -1) {
-					sprintf(results, "Failed to access \"%s\", account does not exist!", user);
-				} else {
-					sprintf(results, "Succesfully accessed \"%s\"!", user);
+					sprintf(results, "Failed to access \"%s\", account does not exist!\n", user);
+				} else if (servedAccount == -2) { 
+					servedAccount = -1;
+					sprintf(results, "Failed to access \"%s\", the account is already being accessed.!\n", user);
+				}else {
+					sprintf(results, "Succesfully accessed \"%s\"!\n", user);
 				}
 				send(sock, results, 255, 0);
 
