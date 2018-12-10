@@ -197,7 +197,7 @@ int socket_desc , client_sock , c;
         }
          
         //Now join the thread , so that we dont terminate before the thread
-        pthread_join( thread_id , NULL);
+        //pthread_join( thread_id , NULL);
 		
     }
      
