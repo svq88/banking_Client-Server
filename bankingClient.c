@@ -24,6 +24,8 @@ void * handleInput (void * arg) {
 
 int main(int varc, char* argv[])
 {
+
+
 int socket_desc, val;
 struct sockaddr_in client_addr;
 char buffer[256];
@@ -31,7 +33,7 @@ socket_desc = socket(AF_INET, SOCK_STREAM, 0);
 struct hostent *server;
 
 
-int port = htons(8725);
+int port = htons(8777);
 
 client_addr.sin_family = AF_INET;
 
@@ -67,6 +69,11 @@ while(1)
 	if (strlen(buffer) != 0) {
 		printf("Message from server: %s\n",buffer);
 		if (strcmp(buffer, "Disconnecting") == 0) {
+			break;
+		}
+		else if(strcmp(buffer, "ServerShutDown") == 0){
+			printf("You have disconnected from the sever, goodbye.");
+			send(sockfd, "Disconnected", 1024, 0);
 			break;
 		}
 		buffer[0] = '\0';
