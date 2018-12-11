@@ -1,5 +1,3 @@
-
-
 #include<stdio.h>
 #include<errno.h>
 #include<string.h>    //strlen
@@ -8,6 +6,8 @@
 #include<arpa/inet.h> //inet_addr
 #include<unistd.h>    //write
 #include<pthread.h> 
+#include <signal.h> 
+#include<semaphore.h>
 //S#include "bankingServer.h"
 
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -22,6 +22,8 @@ int socketIds[10000];
 int clientCount = 0;
 
 account accounts[10000];
+pthread_t threadIDs[10000];
+int counter = 0;
 
 int numberOfElements = 0;
 
@@ -115,6 +117,8 @@ void* handle_connection(void *arg)
     char buffer[] = "Please enter what you wish to do(create <accountName>, serve <accontName> )\0";
 	send(sock , buffer , 255, 0);
 	int servedAccount = -1;
+	//read to see if disconnect
+
     while(1) {
 		read(sock,client_message,1024);
 		if (strlen(client_message) != 0) {
@@ -139,6 +143,9 @@ void* handle_connection(void *arg)
 				shutdown(sock, SHUT_RDWR);
 				close(sock);
 				printf("Disconnected from a client.\n");
+				return;
+			}
+			else if(strcmp("Disconnected", client_message) == 0){
 				return;
 			}
 			int length = strlen(client_message);
@@ -247,16 +254,34 @@ void* handle_connection(void *arg)
     
 }
 
+void sigintHandler(int sig_num) 
+{ 
+	int i;
+	for(i = 0; i<clientCount; i++){
+		send(socketIds[i], "ServerShutDown", 255, 0);
+	}
+	int j;
+	for (j = 0; j < counter; j++){
+       pthread_join(threadIDs[j], NULL);
+	}
+	exit(0);
 
+
+
+  // stop its timer, lock
+//all accounts, disconnect all clients, send all clients a shutdown message, deallocate all memory, close
+//all sockets and join() all threads.
+//Clients should shut down automatically when they receive the server's shutdown message.
+} 
 
 int main(void)
 {
     /* do the necessary setup, i.e. bind() and listen()... */
-    
+    signal(SIGINT, sigintHandler); 
 int socket_desc , client_sock , c;
     struct sockaddr_in server , client;
      int sockfd, newsocket, length;
-     int port =  8725;
+     int port =  8777;
     //Create socket
 
     socket_desc = socket(AF_INET , SOCK_STREAM , 0);
@@ -299,11 +324,14 @@ int socket_desc , client_sock , c;
         newsocket = accept(socket_desc, (struct sockaddr *) &client, (socklen_t *) &c);
 		printf("Accepted new client connection!\n");
 		socketIds[clientCount++] = newsocket;
+		threadIDs[counter] = thread_id;
+		counter ++;
         if( pthread_create( &thread_id , NULL ,  handle_connection , &newsocket) < 0)
         {
             perror("could not create thread");
             return 1;
         }
+        
          
         //Now join the thread , so that we dont terminate before the thread
         //pthread_join( thread_id , NULL);
@@ -318,5 +346,4 @@ int socket_desc , client_sock , c;
      
     return 0;
 }
-
 
