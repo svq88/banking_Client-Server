@@ -8,7 +8,7 @@
 #include<pthread.h> 
 #include <signal.h> 
 #include<semaphore.h>
-//S#include "bankingServer.h"
+#include <sys/time.h>
 
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
@@ -22,24 +22,32 @@ int socketIds[10000];
 int clientCount = 0;
 
 account accounts[10000];
-pthread_t threadIDs[10000];
-int counter = 0;
 
 int numberOfElements = 0;
+
+int threadCount = 0;
+
+static sigset_t   mask;
+
+sem_t semaphore;
 
 int serve(char * accountName)
 {
 	int i = 0;
+	pthread_mutex_lock(&mutex);
 	while(i < numberOfElements){
 		if(strcmp(accounts[i].accountName, accountName) == 0){
 			if (accounts[i].inUse == 1) {
+				pthread_mutex_unlock(&mutex);
 				return -2;
 			}
 			accounts[i].inUse = 1;
+			pthread_mutex_unlock(&mutex);
 			return i;
 		}
 		i++;
 	}
+	pthread_mutex_unlock(&mutex);
 	return -1;//account does not exist
 }
 
@@ -146,6 +154,8 @@ void* handle_connection(void *arg)
 				return;
 			}
 			else if(strcmp("Disconnected", client_message) == 0){
+				shutdown(sock, SHUT_RDWR);
+				close(sock);
 				return;
 			}
 			int length = strlen(client_message);
@@ -256,32 +266,74 @@ void* handle_connection(void *arg)
 
 void sigintHandler(int sig_num) 
 { 
-	int i;
-	for(i = 0; i<clientCount; i++){
-		send(socketIds[i], "ServerShutDown", 255, 0);
+	if (sig_num == SIGINT) {
+		puts("Server manually terminated!");
+		int i;
+		for(i = 0; i<clientCount; i++){
+			send(socketIds[i], "ServerShutDown", 255, 0);
+		}
+		exit(0);
 	}
-	int j;
-	for (j = 0; j < counter; j++){
-       pthread_join(threadIDs[j], NULL);
+}
+
+void * signal_thread(void * arg) {
+
+
+	while (1) {
+		int caught_signal;
+	
+		sigwait(&mask, &caught_signal);
+	
+		switch(caught_signal) {
+		case SIGINT:
+			puts("Server manually terminated!");
+			int i;
+			for(i = 0; i<clientCount; i++){
+				send(socketIds[i], "ServerShutDown", 255, 0);
+			}
+			break;
+		case SIGALRM:
+			printf("CAUGHT SIGALRM\n");
+			break;
+		default:
+			break;
+		}
 	}
-	exit(0);
-
-
-
-  // stop its timer, lock
-//all accounts, disconnect all clients, send all clients a shutdown message, deallocate all memory, close
-//all sockets and join() all threads.
-//Clients should shut down automatically when they receive the server's shutdown message.
-} 
+}
 
 int main(void)
 {
     /* do the necessary setup, i.e. bind() and listen()... */
-    signal(SIGINT, sigintHandler); 
+	int rc;
+    pthread_t signal_tid;
+	sigemptyset(&mask);
+	sigaddset(&mask, SIGINT);
+	sigaddset(&mask, SIGALRM);
+	rc = pthread_sigmask(SIG_BLOCK, &mask, NULL);
+	
+	if (rc != 0) 
+		puts("Sig mask error");
+
+	rc = pthread_create(&signal_tid, NULL, signal_thread, &mask);
+
+	if (rc!= 0)
+		puts("Sig thread error");
+
+	
+
+
+	struct itimerval timer;
+ 	timer.it_value.tv_sec = 2;
+ 	timer.it_value.tv_usec = 0;
+ 	timer.it_interval.tv_sec = 2;
+ 	timer.it_interval.tv_usec = 0;
+ 	setitimer (ITIMER_REAL, &timer, NULL);
+
+
 int socket_desc , client_sock , c;
     struct sockaddr_in server , client;
      int sockfd, newsocket, length;
-     int port =  8777;
+     int port =  8778;
     //Create socket
 
     socket_desc = socket(AF_INET , SOCK_STREAM , 0);
@@ -317,15 +369,15 @@ int socket_desc , client_sock , c;
     puts("Waiting for incoming connections...");
     
 	pthread_t thread_id;
-	
-    while( 1 )
+      while( 1 )
     {
     	int * socketPtr = malloc(sizeof(int));
         newsocket = accept(socket_desc, (struct sockaddr *) &client, (socklen_t *) &c);
+		if (newsocket == -1) {
+			perror("Error at accept..");
+		}
 		printf("Accepted new client connection!\n");
 		socketIds[clientCount++] = newsocket;
-		threadIDs[counter] = thread_id;
-		counter ++;
         if( pthread_create( &thread_id , NULL ,  handle_connection , &newsocket) < 0)
         {
             perror("could not create thread");

@@ -33,7 +33,7 @@ socket_desc = socket(AF_INET, SOCK_STREAM, 0);
 struct hostent *server;
 
 
-int port = htons(8777);
+int port = htons(8778);
 
 client_addr.sin_family = AF_INET;
 
@@ -72,7 +72,7 @@ while(1)
 			break;
 		}
 		else if(strcmp(buffer, "ServerShutDown") == 0){
-			printf("You have disconnected from the sever, goodbye.");
+			printf("You have disconnected from the sever, goodbye.\n");
 			send(sockfd, "Disconnected", 1024, 0);
 			break;
 		}
