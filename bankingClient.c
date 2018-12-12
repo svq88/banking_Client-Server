@@ -33,7 +33,7 @@ socket_desc = socket(AF_INET, SOCK_STREAM, 0);
 struct hostent *server;
 
 
-int port = htons(8778);
+int port = htons(8779);
 
 client_addr.sin_family = AF_INET;
 

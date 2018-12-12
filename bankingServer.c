@@ -333,7 +333,7 @@ int main(void)
 int socket_desc , client_sock , c;
     struct sockaddr_in server , client;
      int sockfd, newsocket, length;
-     int port =  8778;
+     int port =  8779;
     //Create socket
 
     socket_desc = socket(AF_INET , SOCK_STREAM , 0);
@@ -372,7 +372,7 @@ int socket_desc , client_sock , c;
       while( 1 )
     {
     	int * socketPtr = malloc(sizeof(int));
-        newsocket = accept(socket_desc, (struct sockaddr *) &client, (socklen_t *) &c);
+        newsocket = accept(socket_desc, (struct sockaddr *) &client, &length);
 		if (newsocket == -1) {
 			perror("Error at accept..");
 		}
