@@ -129,6 +129,7 @@ void* handle_connection(void *arg)
 
     while(1) {
 		read(sock,client_message,1024);
+		sem_wait(&semaphore);
 		if (strlen(client_message) != 0) {
 			printf("Message from client: %s\n",client_message);
 			if (strcmp("query\n", client_message) == 0) {
@@ -151,11 +152,16 @@ void* handle_connection(void *arg)
 				shutdown(sock, SHUT_RDWR);
 				close(sock);
 				printf("Disconnected from a client.\n");
+				threadCount--;
+				sem_wait(&semaphore);
 				return;
 			}
 			else if(strcmp("Disconnected", client_message) == 0){
+				
 				shutdown(sock, SHUT_RDWR);
 				close(sock);
+				threadCount--;
+				sem_wait(&semaphore);
 				return;
 			}
 			int length = strlen(client_message);
@@ -236,7 +242,6 @@ void* handle_connection(void *arg)
 				char * endptr;
 				errno = 0;
 				double amt = strtod(command, &endptr);
-				printf("errno %d\n", errno);
 				if ((amt == 0 || amt < 0 && (errno != 0 || command == endptr)) || amt < 0) {
 					char doubleError[] = "Please input a valid double -- withdraw <double Amount>. E.g. withdraw 100.05\n";
 					send(sock , doubleError , 255, 0);
@@ -256,6 +261,7 @@ void* handle_connection(void *arg)
 				send(sock, error, 255, 0);
 			}
 			client_message[0] = '\0';
+			sem_post(&semaphore);
 		}
 	}
     
@@ -283,17 +289,43 @@ void * signal_thread(void * arg) {
 		int caught_signal;
 	
 		sigwait(&mask, &caught_signal);
-	
+		puts("Got here..");
+		pthread_mutex_lock(&mutex);
+			int i;
 		switch(caught_signal) {
 		case SIGINT:
 			puts("Server manually terminated!");
-			int i;
+			int count = threadCount;
+			for (i = 0; i < count; i++) {
+				sem_wait(&semaphore);
+			}
 			for(i = 0; i<clientCount; i++){
 				send(socketIds[i], "ServerShutDown", 255, 0);
 			}
+			for (i = 0; i < count; i++) {
+				sem_post(&semaphore);
+			}
+			pthread_mutex_unlock(&mutex);
 			break;
 		case SIGALRM:
-			printf("CAUGHT SIGALRM\n");
+			for (i = 0; i < threadCount; i++) {
+				sem_wait(&semaphore);
+			}
+			int j;
+			printf("Account Name,\tBalance,\tIn Service?\n");
+			for (j = 0; j < numberOfElements; j++) {
+				char* inService = "";
+				if(accounts[j].inUse == 1){
+					inService = "IN SERVICE";
+				} else {
+					inService = "NOT IN SERVICE";
+				}
+				printf("%s,\t%f,\t%s\n", accounts[j].accountName, accounts[j].balance, inService);
+			}
+			for (i = 0; i < threadCount; i++) {
+				sem_post(&semaphore);
+			}
+			pthread_mutex_unlock(&mutex);
 			break;
 		default:
 			break;
@@ -328,7 +360,7 @@ int main(void)
  	timer.it_interval.tv_sec = 2;
  	timer.it_interval.tv_usec = 0;
  	setitimer (ITIMER_REAL, &timer, NULL);
-
+	sem_init(&semaphore, 0,0);
 
 int socket_desc , client_sock , c;
     struct sockaddr_in server , client;
@@ -373,6 +405,8 @@ int socket_desc , client_sock , c;
     {
     	int * socketPtr = malloc(sizeof(int));
         newsocket = accept(socket_desc, (struct sockaddr *) &client, &length);
+		
+		//pthread_mutex_lock(&mutex);
 		if (newsocket == -1) {
 			perror("Error at accept..");
 		}
@@ -382,8 +416,11 @@ int socket_desc , client_sock , c;
         {
             perror("could not create thread");
             return 1;
-        }
-        
+        } else {
+			threadCount++;
+		}
+        sem_post(&semaphore);
+		//pthread_mutex_unlock(&mutex);
          
         //Now join the thread , so that we dont terminate before the thread
         //pthread_join( thread_id , NULL);
