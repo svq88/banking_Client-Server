@@ -132,7 +132,6 @@ void* handle_connection(void *arg)
 		read(sock,client_message,1024);
 		if (strlen(client_message) != 0) {
 			printf("Message from client: %s\n",client_message);
-			printf("strcmp: %d\n", strcmp("Disconnected", client_message));
 			sem_wait(&semaphore);
 			if (strcmp("query\n", client_message) == 0) {
 				if (servedAccount == -1) {
@@ -158,9 +157,9 @@ void* handle_connection(void *arg)
 				shutdown(sock, SHUT_RDWR);
 				close(sock);
 				printf("Disconnected from a client.\n");
-				sem_wait(&semaphore);
 				threadCount--;
 				pthread_mutex_unlock(&mutex);
+				sem_post(&semaphore);
 				return;
 			}
 			else if(strcmp("Disconnected", client_message) == 0){
