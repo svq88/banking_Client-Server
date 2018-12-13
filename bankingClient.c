@@ -16,6 +16,9 @@ void * handleInput (void * arg) {
 	int sockfd = *(int*)arg;
  	char sendBuff[1024];
 	fgets(sendBuff, 1024, stdin);
+	if (strcmp("\n", sendBuff) == 0 || strcmp("", sendBuff) == 0) {
+		continue;
+	}
 	send(sockfd, sendBuff, 1024, 0);
 	sendBuff[0] = '\0';
 	sleep(2);

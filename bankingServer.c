@@ -19,6 +19,7 @@ typedef struct account {
 } account;
 
 int socketIds[10000];
+pthread_t threadIds[10000];
 int clientCount = 0;
 
 account accounts[10000];
@@ -129,39 +130,45 @@ void* handle_connection(void *arg)
 
     while(1) {
 		read(sock,client_message,1024);
-		sem_wait(&semaphore);
 		if (strlen(client_message) != 0) {
 			printf("Message from client: %s\n",client_message);
+			printf("strcmp: %d\n", strcmp("Disconnected", client_message));
+			sem_wait(&semaphore);
 			if (strcmp("query\n", client_message) == 0) {
 				if (servedAccount == -1) {
 					send(sock, "You need to access an account using the serve command first.\n", 255, 0);
+				sem_post(&semaphore);
 					continue;
 				}
 				double amt = query(servedAccount);
 				char buff[255];
 				sprintf(buff, "Current Balance: %f\n", amt);
 				send(sock, buff, 255, 0);
+				sem_post(&semaphore);
 				continue;
 			} else if (strcmp("end\n", client_message) == 0) {
 				servedAccount = end(servedAccount);
 				send(sock, "Ending service with current account", 255, 0);
+				sem_post(&semaphore);
 				continue;
 			} else if (strcmp("quit\n", client_message) == 0) {
+				pthread_mutex_lock(&mutex);
 				end(servedAccount);
 				send(sock, "Disconnecting", 255, 0);
 				shutdown(sock, SHUT_RDWR);
 				close(sock);
 				printf("Disconnected from a client.\n");
-				threadCount--;
 				sem_wait(&semaphore);
+				threadCount--;
+				pthread_mutex_unlock(&mutex);
 				return;
 			}
 			else if(strcmp("Disconnected", client_message) == 0){
-				
+				pthread_mutex_lock(&mutex);
 				shutdown(sock, SHUT_RDWR);
 				close(sock);
 				threadCount--;
-				sem_wait(&semaphore);
+				pthread_mutex_unlock(&mutex);
 				return;
 			}
 			int length = strlen(client_message);
@@ -171,12 +178,14 @@ void* handle_connection(void *arg)
 			if (strcmp("create", command) == 0) {
 				if (servedAccount != -1) {
 					send(sock, "You cannot create an account while accessing one.\n", 255, 0);
+				sem_post(&semaphore);
 					continue;
 				}
 				command = strtok(NULL, " ");
 				if (strcmp("create", command) == 0 || strcmp("", command) == 0) {
 					char error[] = "Please enter a username - create <username>.";
 					send(sock, error, 255, 0);
+				sem_post(&semaphore);
 					continue;
 				}
 				user += 7;
@@ -193,12 +202,14 @@ void* handle_connection(void *arg)
 			} else if (strcmp("serve", command) == 0) {
 				if (servedAccount != -1) {
 					send(sock, "You are already accessing an account.\n", 255, 0);
+				sem_post(&semaphore);
 					continue;
 				}
 				command = strtok(NULL, " ");
 				if (strcmp("create", command) == 0 || strcmp("", command) == 0) {
 					char error[] = "Please enter a username - create <username>.";
 					send(sock, error, 255, 0);
+					sem_post(&semaphore);
 					continue;
 				}
 				user += 6;
@@ -217,6 +228,7 @@ void* handle_connection(void *arg)
 			} else if (strcmp("deposit", command) == 0) {
 				if (servedAccount == -1) {
 					send(sock, "You need to access an account using the serve command first.\n", 255, 0);
+					sem_post(&semaphore);
 					continue;
 				}
 				command = strtok(NULL, " ");
@@ -226,6 +238,7 @@ void* handle_connection(void *arg)
 				if ((amt == 0 && (errno != 0 || command == endptr)) || amt < 0) {
 					char doubleError[] = "Please input a valid double -- deposit <double Amount>. E.g. withdraw 100.05\n";
 					send(sock , doubleError , 255, 0);
+					sem_post(&semaphore);
 					continue;
 				}
 				char buff[255];
@@ -236,6 +249,7 @@ void* handle_connection(void *arg)
 			} else if (strcmp("withdraw", command) == 0) {
 				if (servedAccount == -1) {
 					send(sock, "You need to access an account using the serve command first.\n", 255, 0);
+					sem_post(&semaphore);
 					continue;
 				}
 				command = strtok(NULL, " ");
@@ -270,17 +284,7 @@ void* handle_connection(void *arg)
     
 }
 
-void sigintHandler(int sig_num) 
-{ 
-	if (sig_num == SIGINT) {
-		puts("Server manually terminated!");
-		int i;
-		for(i = 0; i<clientCount; i++){
-			send(socketIds[i], "ServerShutDown", 255, 0);
-		}
-		exit(0);
-	}
-}
+
 
 void * signal_thread(void * arg) {
 
@@ -289,23 +293,26 @@ void * signal_thread(void * arg) {
 		int caught_signal;
 	
 		sigwait(&mask, &caught_signal);
-		puts("Got here..");
 		pthread_mutex_lock(&mutex);
 			int i;
 		switch(caught_signal) {
 		case SIGINT:
 			puts("Server manually terminated!");
 			int count = threadCount;
-			for (i = 0; i < count; i++) {
+			for (i = 0; i < threadCount; i++) {
 				sem_wait(&semaphore);
 			}
 			for(i = 0; i<clientCount; i++){
 				send(socketIds[i], "ServerShutDown", 255, 0);
 			}
-			for (i = 0; i < count; i++) {
+			for (i = 0; i < threadCount; i++) {
 				sem_post(&semaphore);
 			}
 			pthread_mutex_unlock(&mutex);
+			for (i =0 ; i < count ; i++) {
+				pthread_join(threadIds[i], NULL);
+			}
+			exit(0);
 			break;
 		case SIGALRM:
 			for (i = 0; i < threadCount; i++) {
@@ -360,9 +367,9 @@ int main(int varc, char* argv[])
 
 
 	struct itimerval timer;
- 	timer.it_value.tv_sec = 2;
+ 	timer.it_value.tv_sec = 15;
  	timer.it_value.tv_usec = 0;
- 	timer.it_interval.tv_sec = 2;
+ 	timer.it_interval.tv_sec = 15;
  	timer.it_interval.tv_usec = 0;
  	setitimer (ITIMER_REAL, &timer, NULL);
 	sem_init(&semaphore, 0,0);
@@ -422,7 +429,7 @@ int socket_desc , client_sock , c;
             perror("could not create thread");
             return 1;
         } else {
-			threadCount++;
+			threadIds[threadCount++] = thread_id;
 		}
         sem_post(&semaphore);
 		//pthread_mutex_unlock(&mutex);
