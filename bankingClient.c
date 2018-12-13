@@ -25,15 +25,19 @@ void * handleInput (void * arg) {
 int main(int varc, char* argv[])
 {
 
-
+if(varc != 3){
+	printf("ERROR: wrong amount of command line arguments");
+	return 1;
+}
 int socket_desc, val;
 struct sockaddr_in client_addr;
 char buffer[256];
 socket_desc = socket(AF_INET, SOCK_STREAM, 0);
 struct hostent *server;
 
+int portNumber = atoi (argv[2]);
 
-int port = htons(8779);
+int port = htons(portNumber);
 
 client_addr.sin_family = AF_INET;
 
