@@ -333,9 +333,14 @@ void * signal_thread(void * arg) {
 	}
 }
 
-int main(void)
+int main(int varc, char* argv[])
 {
     /* do the necessary setup, i.e. bind() and listen()... */
+
+    if(varc != 2){
+    	printf("ERROR: wrong amount of command line arguments");
+	return 1;
+    }
 	int rc;
     pthread_t signal_tid;
 	sigemptyset(&mask);
@@ -365,7 +370,7 @@ int main(void)
 int socket_desc , client_sock , c;
     struct sockaddr_in server , client;
      int sockfd, newsocket, length;
-     int port =  8779;
+     int port =  atoi (argv[1]);
     //Create socket
 
     socket_desc = socket(AF_INET , SOCK_STREAM , 0);
@@ -435,4 +440,3 @@ int socket_desc , client_sock , c;
      
     return 0;
 }
-
