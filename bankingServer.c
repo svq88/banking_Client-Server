@@ -151,8 +151,8 @@ void* handle_connection(void *arg)
 				sem_post(&semaphore);
 				continue;
 			} else if (strcmp("quit\n", client_message) == 0) {
-				pthread_mutex_lock(&mutex);
 				end(servedAccount);
+				pthread_mutex_lock(&mutex);
 				send(sock, "Disconnecting", 255, 0);
 				shutdown(sock, SHUT_RDWR);
 				close(sock);
